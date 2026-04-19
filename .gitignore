@@ -1,0 +1,48 @@
+# =============================================================================
+#  .gitignore — Mivy Print Bridge
+# =============================================================================
+
+# Go binary (compiled by build.ps1 / CI). Se regenera siempre desde source.
+/mivy-bridge.exe
+/zenpos-bridge.exe
+/zenpos-bridge.exe~
+*.exe~
+
+# Directorio de build (installer generado por Inno Setup + intermedios).
+# El artifact real se publica en GitHub Releases, no en el repo.
+/build/
+/dist/
+
+# Code signing (NUNCA commitear certificados ni passwords)
+*.pfx
+*.p12
+*.pem
+codesign.*
+signing-*.json
+
+# Go modules (si algún día usás vendor)
+/vendor/
+
+# Test output
+*.test
+*.out
+*.prof
+coverage.*
+
+# Logs
+*.log
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temp de instaladores
+*.tmp
