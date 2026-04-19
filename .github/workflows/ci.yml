@@ -1,0 +1,66 @@
+name: CI
+
+# Fast validation on every push and pull request.
+# Catches build breakages BEFORE tagging a release.
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    name: Build & vet (Windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          check-latest: true
+          cache: true
+
+      - name: Download dependencies
+        shell: pwsh
+        run: go mod download
+
+      - name: go vet
+        shell: pwsh
+        run: go vet ./...
+
+      - name: Build binary
+        shell: pwsh
+        run: |
+          $env:CGO_ENABLED = "0"
+          $env:GOOS = "windows"
+          $env:GOARCH = "amd64"
+          go build -trimpath -ldflags "-s -w -X main.version=ci-${{ github.sha }}" -o zenpos-bridge.exe .
+          if (-not (Test-Path zenpos-bridge.exe)) { throw "Build failed" }
+          "Size: $([Math]::Round((Get-Item zenpos-bridge.exe).Length / 1MB, 2)) MB"
+
+      - name: Smoke test — bridge starts and responds
+        shell: pwsh
+        run: |
+          $proc = Start-Process -FilePath ".\zenpos-bridge.exe" -PassThru
+          try {
+            Start-Sleep -Seconds 3
+            $res = Invoke-RestMethod -Uri "http://localhost:7777/status" -TimeoutSec 5
+            if (-not $res) { throw "No response from /status" }
+            Write-Host "Status OK: connected=$($res.connected) version=$($res.version)"
+            $printers = Invoke-RestMethod -Uri "http://localhost:7777/printers" -TimeoutSec 5
+            Write-Host "Detected $($printers.installed.Count) installed printers, $($printers.serialPorts.Count) serial ports"
+          } finally {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Upload build artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zenpos-bridge-${{ github.sha }}
+          path: zenpos-bridge.exe
+          retention-days: 7

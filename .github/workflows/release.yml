@@ -1,0 +1,164 @@
+name: Release
+
+# Triggers a full build of the installer and publishes a GitHub Release.
+#
+# Two ways to release:
+#   1. Push a tag like v1.2.0  -> automatic release with that version
+#   2. Manual trigger from the Actions tab with a version input
+#
+# Optional secrets for code signing (skip if you don't have them yet):
+#   - SIGNING_CERT_BASE64     : your .pfx file encoded with certutil/base64
+#   - SIGNING_CERT_PASSWORD   : password for the .pfx
+#   - SIGNING_TIMESTAMP_URL   : (optional) override default timestamp server
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 1.2.0). Leave empty to use the current date.'
+        required: false
+        type: string
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write  # needed to create the GitHub Release
+
+jobs:
+  build:
+    name: Build installer (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $ref = "${{ github.ref }}"
+          if ($ref -like "refs/tags/v*") {
+            $version = $ref.Substring("refs/tags/v".Length)
+          } elseif ("${{ github.event.inputs.version }}") {
+            $version = "${{ github.event.inputs.version }}"
+          } else {
+            $version = (Get-Date -Format "yyyy.MM.dd")
+          }
+          if ($version -match '^[0-9]+\.[0-9]+(\.[0-9]+)?') {} else {
+            throw "Invalid version: $version"
+          }
+          "version=$version" | Out-File -Append $env:GITHUB_OUTPUT
+          Write-Host "Release version: $version"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          check-latest: true
+          cache: true
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe not found after install" }
+          "ISCC=$iscc" | Out-File -Append $env:GITHUB_ENV
+
+      - name: Decode signing certificate (optional)
+        id: cert
+        if: ${{ env.SIGNING_CERT_BASE64 != '' }}
+        shell: pwsh
+        env:
+          SIGNING_CERT_BASE64: ${{ secrets.SIGNING_CERT_BASE64 }}
+        run: |
+          $pfx = "$env:RUNNER_TEMP\codesign.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGNING_CERT_BASE64))
+          "pfx_path=$pfx" | Out-File -Append $env:GITHUB_OUTPUT
+          Write-Host "Certificate decoded to $pfx"
+
+      - name: Build installer (unsigned)
+        if: ${{ steps.cert.outputs.pfx_path == '' }}
+        shell: pwsh
+        run: |
+          .\installer\build.ps1 -Version "${{ steps.version.outputs.version }}" -ISCC "$env:ISCC"
+
+      - name: Build installer (signed)
+        if: ${{ steps.cert.outputs.pfx_path != '' }}
+        shell: pwsh
+        env:
+          SIGNING_CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+          SIGNING_TIMESTAMP_URL: ${{ secrets.SIGNING_TIMESTAMP_URL }}
+        run: |
+          $tsUrl = if ($env:SIGNING_TIMESTAMP_URL) { $env:SIGNING_TIMESTAMP_URL } else { "http://timestamp.digicert.com" }
+          .\installer\build.ps1 `
+            -Version "${{ steps.version.outputs.version }}" `
+            -ISCC "$env:ISCC" `
+            -SignCert "${{ steps.cert.outputs.pfx_path }}" `
+            -SignPassword "$env:SIGNING_CERT_PASSWORD" `
+            -TimestampUrl "$tsUrl"
+
+      - name: Verify installer
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem ".\build\zenPOS-PrintBridge-Setup-${{ steps.version.outputs.version }}.exe"
+          if (-not $installer) { throw "Installer not found" }
+          Write-Host "Installer: $($installer.FullName)"
+          Write-Host "Size: $([Math]::Round($installer.Length / 1MB, 2)) MB"
+          Get-FileHash $installer.FullName -Algorithm SHA256 | Format-List
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zenPOS-PrintBridge-Setup-${{ steps.version.outputs.version }}
+          path: build/zenPOS-PrintBridge-Setup-${{ steps.version.outputs.version }}.exe
+          retention-days: 30
+
+      - name: Compute SHA256
+        id: hash
+        shell: pwsh
+        run: |
+          $file = ".\build\zenPOS-PrintBridge-Setup-${{ steps.version.outputs.version }}.exe"
+          $h = (Get-FileHash $file -Algorithm SHA256).Hash
+          "sha256=$h" | Out-File -Append $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: ${{ github.event.inputs.prerelease == 'true' }}
+          generate_release_notes: true
+          files: |
+            build/zenPOS-PrintBridge-Setup-${{ steps.version.outputs.version }}.exe
+          body: |
+            ## zenPOS Print Bridge v${{ steps.version.outputs.version }}
+
+            Puente entre zenPOS y tu impresora térmica USB/Red/Serial en Windows.
+
+            ### Instalación
+            1. Descarga `zenPOS-PrintBridge-Setup-${{ steps.version.outputs.version }}.exe`
+            2. Ejecuta el instalador (acepta el UAC)
+            3. El servicio arranca automáticamente — no necesitas hacer nada más
+            4. Vuelve a zenPOS, abre **Historial** y selecciona tu impresora desde el modal
+
+            ### Requisitos
+            - Windows 10 / 11 (64-bit)
+            - Impresora térmica USB, de red (WiFi/Ethernet) o serial (COM)
+
+            ### Verificación
+            SHA-256:
+            ```
+            ${{ steps.hash.outputs.sha256 }}
+            ```
+
+            ---
+            _Generado automáticamente por GitHub Actions._
