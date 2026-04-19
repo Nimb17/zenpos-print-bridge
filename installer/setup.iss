@@ -14,7 +14,12 @@
 ; =============================================================================
 
 #define AppName        "Mivy Print Bridge"
-#define AppVersion     "1.0.0"
+; AppVersion se puede sobrescribir desde la línea de comandos con /DAppVersion=x.y.z
+; (build.ps1 lo hace para inyectar la versión del tag de git). El default aplica
+; solo cuando se compila ad-hoc sin pasar la versión.
+#ifndef AppVersion
+  #define AppVersion "1.0.0"
+#endif
 #define AppPublisher   "Mivy"
 #define AppURL         "https://mivy.cl"
 #define ExeName        "mivy-bridge.exe"
