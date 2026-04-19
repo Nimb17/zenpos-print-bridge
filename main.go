@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	svcName        = "zenposPrintBridge"
-	svcDisplayName = "zenPOS Print Bridge"
-	svcDescription = "Permite imprimir desde zenPOS en cualquier impresora térmica USB o de red."
+	svcName        = "mivyPrintBridge"
+	svcDisplayName = "Mivy Print Bridge"
+	svcDescription = "Puente de impresión térmica para apps web. Permite imprimir en cualquier impresora ESC/POS USB, de red o serial desde el navegador."
 )
 
 // program implements service.Interface
@@ -81,7 +81,7 @@ func setupLogger() {
 	if baseDir == "" {
 		return
 	}
-	logDir := filepath.Join(baseDir, "zenPOS", "PrintBridge")
+	logDir := filepath.Join(baseDir, "Mivy", "PrintBridge")
 	os.MkdirAll(logDir, 0755)
 	logPath := filepath.Join(logDir, "bridge.log")
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
@@ -149,7 +149,7 @@ func main() {
 
 	case "run", "":
 		if service.Interactive() {
-			fmt.Printf("zenPOS Print Bridge v%s — http://localhost:%d\n", printer.BridgeVersion, cfg.HTTPPort)
+			fmt.Printf("Mivy Print Bridge v%s — http://localhost:%d\n", printer.BridgeVersion, cfg.HTTPPort)
 			fmt.Println("Presiona Ctrl+C para detener.")
 		}
 		if err := s.Run(); err != nil {

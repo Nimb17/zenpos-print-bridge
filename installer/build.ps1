@@ -1,5 +1,5 @@
 # =============================================================================
-#  zenPOS Print Bridge — installer build script
+#  Mivy Print Bridge — installer build script
 #
 #  Usage:
 #      .\installer\build.ps1
@@ -7,7 +7,7 @@
 #      .\installer\build.ps1 -SignCert "C:\certs\mycert.pfx" -SignPassword "…"
 #
 #  What it does:
-#      1. Compiles zenpos-bridge.exe with ldflags -s -w (strip symbols)
+#      1. Compiles mivy-bridge.exe with ldflags -s -w (strip symbols)
 #      2. (Optional) signs the binary with signtool + your code-signing cert
 #      3. Runs Inno Setup (iscc.exe) to build the installer
 #      4. (Optional) signs the installer too
@@ -34,28 +34,28 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path "$PSScriptRoot\..").Path
 Push-Location $repoRoot
 try {
-    Write-Host "==> zenPOS Print Bridge v$Version" -ForegroundColor Cyan
+    Write-Host "==> Mivy Print Bridge v$Version" -ForegroundColor Cyan
 
     # --- 1. Build Go binary ---------------------------------------------------
     if (-not $SkipGoBuild) {
-        Write-Host "--> Compiling zenpos-bridge.exe" -ForegroundColor Yellow
+        Write-Host "--> Compiling mivy-bridge.exe" -ForegroundColor Yellow
         $env:CGO_ENABLED = "0"
         $env:GOOS = "windows"
         $env:GOARCH = "amd64"
         $ldflags = "-s -w -X main.version=$Version"
-        & go build -trimpath -ldflags="$ldflags" -o zenpos-bridge.exe .
+        & go build -trimpath -ldflags="$ldflags" -o mivy-bridge.exe .
         if ($LASTEXITCODE -ne 0) { throw "go build failed" }
     } else {
-        Write-Host "--> Skipping Go build (using existing zenpos-bridge.exe)" -ForegroundColor DarkGray
+        Write-Host "--> Skipping Go build (using existing mivy-bridge.exe)" -ForegroundColor DarkGray
     }
 
-    if (-not (Test-Path ".\zenpos-bridge.exe")) {
-        throw "zenpos-bridge.exe not found in $repoRoot"
+    if (-not (Test-Path ".\mivy-bridge.exe")) {
+        throw "mivy-bridge.exe not found in $repoRoot"
     }
 
     # --- 2. Sign the binary (optional) ---------------------------------------
     if ($SignCert) {
-        Write-Host "--> Signing zenpos-bridge.exe" -ForegroundColor Yellow
+        Write-Host "--> Signing mivy-bridge.exe" -ForegroundColor Yellow
         $signtool = (Get-Command signtool.exe -ErrorAction SilentlyContinue)?.Source
         if (-not $signtool) {
             $candidates = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
@@ -64,8 +64,8 @@ try {
             if ($candidates) { $signtool = $candidates[0].FullName }
         }
         if (-not $signtool) { throw "signtool.exe not found. Install the Windows 10/11 SDK." }
-        & $signtool sign /f $SignCert /p $SignPassword /fd SHA256 /tr $TimestampUrl /td SHA256 .\zenpos-bridge.exe
-        if ($LASTEXITCODE -ne 0) { throw "signtool failed on zenpos-bridge.exe" }
+        & $signtool sign /f $SignCert /p $SignPassword /fd SHA256 /tr $TimestampUrl /td SHA256 .\mivy-bridge.exe
+        if ($LASTEXITCODE -ne 0) { throw "signtool failed on mivy-bridge.exe" }
     }
 
     # --- 3. Locate Inno Setup compiler ---------------------------------------
@@ -87,7 +87,7 @@ try {
     & $ISCC "/DAppVersion=$Version" ".\installer\setup.iss"
     if ($LASTEXITCODE -ne 0) { throw "Inno Setup compiler failed" }
 
-    $installer = Get-ChildItem ".\build\zenPOS-PrintBridge-Setup-$Version.exe" -ErrorAction SilentlyContinue
+    $installer = Get-ChildItem ".\build\Mivy-PrintBridge-Setup-$Version.exe" -ErrorAction SilentlyContinue
     if (-not $installer) { throw "Installer not produced in .\build" }
 
     # --- 5. Sign installer (optional) ----------------------------------------

@@ -1,4 +1,4 @@
-# Releasing zenPOS Print Bridge
+# Releasing Mivy Print Bridge
 
 Guía paso a paso para publicar una nueva versión del Print Bridge.
 
@@ -19,17 +19,17 @@ git push origin v1.0.0
 
 Eso dispara `.github/workflows/release.yml` que en **~3-5 min**:
 
-1. Compila `zenpos-bridge.exe` con Go (Windows amd64, stripped)
+1. Compila `mivy-bridge.exe` con Go (Windows amd64, stripped)
 2. Instala Inno Setup vía Chocolatey en el runner
-3. Genera el installer `zenPOS-PrintBridge-Setup-1.0.0.exe`
+3. Genera el installer `Mivy-PrintBridge-Setup-1.0.0.exe`
 4. Si hay secrets de firma configurados → firma binario + installer
 5. Calcula SHA-256
 6. Crea la GitHub Release y sube el `.exe` + notas auto-generadas
 
 Al terminar, la URL de descarga queda en:
-`https://github.com/<org>/<repo>/releases/latest/download/zenPOS-PrintBridge-Setup-<version>.exe`
+`https://github.com/<org>/<repo>/releases/latest/download/Mivy-PrintBridge-Setup-<version>.exe`
 
-Esa misma URL es la que consume el banner del frontend (`VITE_PRINT_BRIDGE_URL`).
+Esa misma URL es la que consume el banner del frontend (`VITE_BRIDGE_URL`).
 
 ---
 
@@ -82,7 +82,7 @@ El workflow detecta automáticamente si están presentes y activa el firmado. Si
 En tu PC, tras descargar el `.exe`:
 
 ```powershell
-Get-AuthenticodeSignature .\zenPOS-PrintBridge-Setup-1.0.0.exe | Format-List
+Get-AuthenticodeSignature .\Mivy-PrintBridge-Setup-1.0.0.exe | Format-List
 ```
 
 Debe mostrar `Status: Valid` y el `SignerCertificate` con tu nombre.
@@ -120,7 +120,7 @@ Tras una release exitosa:
 
 - [ ] Descargar el `.exe` de la release y verificar que instala en un PC limpio
 - [ ] Probar el flujo completo desde zenPOS (banner → download → modal → imprimir)
-- [ ] Actualizar `VITE_PRINT_BRIDGE_URL` en tu deploy si apuntaba a una versión fija (en general mejor usar `/releases/latest/download/...`)
+- [ ] Actualizar `VITE_BRIDGE_URL` en tu deploy si apuntaba a una versión fija (en general mejor usar `/releases/latest/download/...`)
 - [ ] Anunciar a los clientes existentes si hay cambios importantes (cambio de puerto, reconfiguración requerida, etc.)
 
 ---

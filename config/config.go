@@ -46,7 +46,7 @@ func DefaultConfig() *Config {
 func configDir() (string, bool, error) {
 	// Try PROGRAMDATA first
 	if programData := os.Getenv("PROGRAMDATA"); programData != "" {
-		dir := filepath.Join(programData, "zenPOS", "PrintBridge")
+		dir := filepath.Join(programData, "Mivy", "PrintBridge")
 		if err := os.MkdirAll(dir, 0755); err == nil {
 			// Probe writability
 			probe := filepath.Join(dir, ".writetest")
@@ -65,7 +65,7 @@ func configDir() (string, bool, error) {
 		}
 		appData = home
 	}
-	dir := filepath.Join(appData, "zenPOS", "PrintBridge")
+	dir := filepath.Join(appData, "Mivy", "PrintBridge")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return "", false, err
 	}
@@ -80,14 +80,24 @@ func configPath() (string, error) {
 	return filepath.Join(dir, "config.json"), nil
 }
 
-// legacyConfigPath returns the old per-user APPDATA path (used before we
-// moved to PROGRAMDATA). Kept for automatic one-way migration.
-func legacyConfigPath() (string, error) {
-	appData := os.Getenv("APPDATA")
-	if appData == "" {
-		return "", os.ErrNotExist
+// legacyPaths returns old config locations that should be migrated from.
+// These cover:
+//   1. Old brand (zenPOS) in both PROGRAMDATA and APPDATA
+//   2. Pre-PROGRAMDATA per-user APPDATA under Mivy (very early installs)
+// Migration is one-way: on first Load() we pick the first existing file
+// and persist it into the current canonical path.
+func legacyPaths() []string {
+	var paths []string
+	if pd := os.Getenv("PROGRAMDATA"); pd != "" {
+		paths = append(paths, filepath.Join(pd, "zenPOS", "PrintBridge", "config.json"))
 	}
-	return filepath.Join(appData, "zenPOS", "PrintBridge", "config.json"), nil
+	if ad := os.Getenv("APPDATA"); ad != "" {
+		paths = append(paths,
+			filepath.Join(ad, "Mivy", "PrintBridge", "config.json"),
+			filepath.Join(ad, "zenPOS", "PrintBridge", "config.json"),
+		)
+	}
+	return paths
 }
 
 func Load() (*Config, error) {
@@ -98,9 +108,12 @@ func Load() (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// Migration: if a legacy per-user config exists, adopt it.
-			if legacyPath, lerr := legacyConfigPath(); lerr == nil && legacyPath != path {
-				if legacyData, rerr := os.ReadFile(legacyPath); rerr == nil {
+			// Migration: try each legacy path in order and adopt the first hit.
+			for _, legacy := range legacyPaths() {
+				if legacy == path {
+					continue
+				}
+				if legacyData, rerr := os.ReadFile(legacy); rerr == nil {
 					data = legacyData
 					// Best-effort: persist into the new location.
 					_ = os.WriteFile(path, legacyData, 0644)

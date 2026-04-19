@@ -108,24 +108,36 @@ jobs:
       - name: Verify installer
         shell: pwsh
         run: |
-          $installer = Get-ChildItem ".\build\zenPOS-PrintBridge-Setup-${{ steps.version.outputs.version }}.exe"
+          $installer = Get-ChildItem ".\build\Mivy-PrintBridge-Setup-${{ steps.version.outputs.version }}.exe"
           if (-not $installer) { throw "Installer not found" }
           Write-Host "Installer: $($installer.FullName)"
           Write-Host "Size: $([Math]::Round($installer.Length / 1MB, 2)) MB"
           Get-FileHash $installer.FullName -Algorithm SHA256 | Format-List
 
+      # Duplicamos el .exe con un nombre ESTABLE (sin versión) para que las apps
+      # consumidoras puedan usar una URL que no cambia entre releases:
+      #   https://github.com/<owner>/<repo>/releases/latest/download/Mivy-PrintBridge-Setup.exe
+      # El archivo versionado se mantiene para historial y rollback.
+      - name: Create stable-named copy
+        shell: pwsh
+        run: |
+          $versioned = ".\build\Mivy-PrintBridge-Setup-${{ steps.version.outputs.version }}.exe"
+          $stable    = ".\build\Mivy-PrintBridge-Setup.exe"
+          Copy-Item $versioned $stable -Force
+          Write-Host "Stable copy created: $stable"
+
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zenPOS-PrintBridge-Setup-${{ steps.version.outputs.version }}
-          path: build/zenPOS-PrintBridge-Setup-${{ steps.version.outputs.version }}.exe
+          name: Mivy-PrintBridge-Setup-${{ steps.version.outputs.version }}
+          path: build/Mivy-PrintBridge-Setup-${{ steps.version.outputs.version }}.exe
           retention-days: 30
 
       - name: Compute SHA256
         id: hash
         shell: pwsh
         run: |
-          $file = ".\build\zenPOS-PrintBridge-Setup-${{ steps.version.outputs.version }}.exe"
+          $file = ".\build\Mivy-PrintBridge-Setup-${{ steps.version.outputs.version }}.exe"
           $h = (Get-FileHash $file -Algorithm SHA256).Hash
           "sha256=$h" | Out-File -Append $env:GITHUB_OUTPUT
 
@@ -138,24 +150,37 @@ jobs:
           prerelease: ${{ github.event.inputs.prerelease == 'true' }}
           generate_release_notes: true
           files: |
-            build/zenPOS-PrintBridge-Setup-${{ steps.version.outputs.version }}.exe
+            build/Mivy-PrintBridge-Setup-${{ steps.version.outputs.version }}.exe
+            build/Mivy-PrintBridge-Setup.exe
           body: |
-            ## zenPOS Print Bridge v${{ steps.version.outputs.version }}
+            ## Mivy Print Bridge v${{ steps.version.outputs.version }}
 
-            Puente entre zenPOS y tu impresora térmica USB/Red/Serial en Windows.
+            Puente local de impresión térmica para apps web del ecosistema Mivy (zenPOS, MesaDigital, etc.). Un único binario sirve para todas las apps — el cliente lo instala una vez.
 
-            ### Instalación
-            1. Descarga `zenPOS-PrintBridge-Setup-${{ steps.version.outputs.version }}.exe`
+            ### Descargas
+
+            | Archivo | Para quién | URL |
+            |---|---|---|
+            | `Mivy-PrintBridge-Setup-${{ steps.version.outputs.version }}.exe` | Versión específica (historial, rollback) | [Descargar](https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/Mivy-PrintBridge-Setup-${{ steps.version.outputs.version }}.exe) |
+            | `Mivy-PrintBridge-Setup.exe` | Siempre la última versión (URL estable) | [Descargar](https://github.com/${{ github.repository }}/releases/latest/download/Mivy-PrintBridge-Setup.exe) |
+
+            **Para apps consumidoras (Vercel env var):** usá la URL estable. No hay que actualizarla en cada release.
+            ```
+            VITE_BRIDGE_URL=https://github.com/${{ github.repository }}/releases/latest/download/Mivy-PrintBridge-Setup.exe
+            ```
+
+            ### Instalación (usuario final)
+            1. Descarga el instalador `.exe`
             2. Ejecuta el instalador (acepta el UAC)
             3. El servicio arranca automáticamente — no necesitas hacer nada más
-            4. Vuelve a zenPOS, abre **Historial** y selecciona tu impresora desde el modal
+            4. Vuelve a tu app web y selecciona tu impresora desde el modal de configuración
 
             ### Requisitos
             - Windows 10 / 11 (64-bit)
             - Impresora térmica USB, de red (WiFi/Ethernet) o serial (COM)
 
             ### Verificación
-            SHA-256:
+            Los dos archivos son **idénticos byte por byte** (solo cambia el nombre). SHA-256:
             ```
             ${{ steps.hash.outputs.sha256 }}
             ```
