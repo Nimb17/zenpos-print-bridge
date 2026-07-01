@@ -18,6 +18,15 @@ var (
 	procEndPagePrinter   = winspool.NewProc("EndPagePrinter")
 	procWritePrinter     = winspool.NewProc("WritePrinter")
 	procEnumPrintersW    = winspool.NewProc("EnumPrintersW")
+	procGetPrinterW      = winspool.NewProc("GetPrinterW")
+)
+
+// PRINTER_INFO_2 status/attribute flags used to detect an unavailable printer.
+const (
+	printerAttributeWorkOffline = 0x00000400 // user/system marked "Use Printer Offline"
+	printerStatusOffline        = 0x00000080
+	printerStatusError          = 0x00000002
+	printerStatusNotAvailable   = 0x00001000
 )
 
 // PRINTER_INFO_2W layout (pointer-size fields first, then DWORDs)
@@ -124,6 +133,48 @@ func (u *USBTransport) Write(data []byte) error {
 		if ret == 0 {
 			return fmt.Errorf("WritePrinter falló en offset %d para %q", i, u.printerName)
 		}
+	}
+	return nil
+}
+
+// Ping reports whether the Windows printer is actually available. It reads
+// PRINTER_INFO_2 via GetPrinter and treats the WORK_OFFLINE attribute and the
+// OFFLINE/NOT_AVAILABLE/ERROR status flags as "not reachable". This catches the
+// common case where a USB printer is powered off — Windows sets WorkOffline —
+// so the bridge stops reporting a false "connected" and /test stops lying.
+//
+// Note: some cheap thermal printers on a write-only RAW/USB port never report
+// offline at all; for those Windows itself cannot tell, and neither can we.
+func (u *USBTransport) Ping() error {
+	handle, err := openPrinter(u.printerName)
+	if err != nil {
+		return fmt.Errorf("no se pudo abrir la impresora %q: %w", u.printerName, err)
+	}
+	defer closePrinter(handle)
+
+	// First call with a nil buffer to learn the required size.
+	var needed uint32
+	procGetPrinterW.Call(handle, 2, 0, 0, uintptr(unsafe.Pointer(&needed)))
+	if needed == 0 {
+		return nil // can't determine — don't report a false offline
+	}
+	buf := make([]byte, needed)
+	ret, _, _ := procGetPrinterW.Call(
+		handle,
+		2, // level 2 = PRINTER_INFO_2
+		uintptr(unsafe.Pointer(&buf[0])),
+		uintptr(needed),
+		uintptr(unsafe.Pointer(&needed)),
+	)
+	if ret == 0 {
+		return nil // couldn't read status — assume ok rather than false-negative
+	}
+	info := (*printerInfo2W)(unsafe.Pointer(&buf[0]))
+	if info.Attributes&printerAttributeWorkOffline != 0 {
+		return fmt.Errorf("la impresora está en modo sin conexión")
+	}
+	if info.Status&(printerStatusOffline|printerStatusNotAvailable|printerStatusError) != 0 {
+		return fmt.Errorf("la impresora no está disponible")
 	}
 	return nil
 }

@@ -78,6 +78,21 @@ func (s *SerialTransport) writeChunks(data []byte) error {
 	return nil
 }
 
+// Ping reports whether the configured COM port is still present on the system.
+// If the USB-serial adapter is unplugged the port disappears from the list.
+func (s *SerialTransport) Ping() error {
+	ports, err := serial.GetPortsList()
+	if err != nil {
+		return nil // can't determine — don't report a false offline
+	}
+	for _, p := range ports {
+		if strings.EqualFold(p, s.portName) {
+			return nil
+		}
+	}
+	return fmt.Errorf("el puerto %s ya no está disponible", s.portName)
+}
+
 func (s *SerialTransport) Close() {
 	if s.port != nil {
 		s.port.Close()

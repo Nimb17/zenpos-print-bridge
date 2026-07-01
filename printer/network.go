@@ -45,6 +45,14 @@ func (n *NetworkTransport) Write(data []byte) error {
 	return nil
 }
 
+// Ping reports whether the printer answers at its IP:port right now.
+func (n *NetworkTransport) Ping() error {
+	if PingNetwork(n.ip, n.port) {
+		return nil
+	}
+	return fmt.Errorf("sin respuesta de %s:%d", n.ip, n.port)
+}
+
 func (n *NetworkTransport) Close() {}
 
 func (n *NetworkTransport) Name() string {
