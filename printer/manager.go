@@ -166,7 +166,7 @@ type Status struct {
 	Version       string `json:"version"`
 }
 
-const BridgeVersion = "1.1.0"
+const BridgeVersion = "1.1.1"
 
 func (m *Manager) Status() Status {
 	m.mu.Lock()
